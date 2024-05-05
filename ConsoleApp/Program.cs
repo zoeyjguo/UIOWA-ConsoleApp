@@ -1,4 +1,6 @@
-﻿using System.IO.Abstractions;
+﻿using System.Collections;
+using System.Diagnostics.Metrics;
+using System.IO.Abstractions;
 using System.Text;
 
 namespace ConsoleApp
@@ -18,10 +20,10 @@ namespace ConsoleApp
             ls.ArchiveAndGetFiles();
 
             // Combine letters of the same student 
-            ls.CombineStudentLetters();
+            ArrayList studentIds = ls.CombineStudentLetters();
 
             // Generate the text report of all the files combined 
-            ls.GenerateTextReport();
+            ls.GenerateTextReport(studentIds);
         }
     }
 
@@ -45,9 +47,10 @@ namespace ConsoleApp
         public void MoveFilesFromDir(string dirFrom, string dirTo);
 
         /// <summary>
-        /// Combines the admission and scholarship files if they are from the same student. 
+        /// Combines the admission and scholarship files if they are from the same student.
         /// </summary>
-        public void CombineStudentLetters();
+        /// <returns>An arraylist of all the student IDs in the scholarship and admission files. </returns>
+        public ArrayList CombineStudentLetters();
 
         /// <summary>
         /// Combine two letter files into one file. Used as a helper in CombineTwoLetters.
@@ -60,7 +63,7 @@ namespace ConsoleApp
         /// <summary>
         /// Generates a text report for the letters combined. 
         /// </summary>
-        void GenerateTextReport();
+        void GenerateTextReport(ArrayList studentIds);
 
         /// <summary>
         ///  Returns the files from date. Used for testing.
@@ -80,6 +83,7 @@ namespace ConsoleApp
         private string dirInput;
         private string dirOutput;
         private string dirArchive;
+        private int combinedFileCount;
         private Dictionary<string, string[]> filesFromDate = new Dictionary<string, string[]>();
 
         public LetterService(string date, IFileSystem fileSystem)
@@ -102,6 +106,7 @@ namespace ConsoleApp
             dirInput = fileSystem.Path.Join(combinedLettersDir, "Input");
             dirArchive = fileSystem.Path.Join(combinedLettersDir, "Archive");
             dirOutput = fileSystem.Path.Join(combinedLettersDir, "Output");
+            combinedFileCount = 0;
         }
 
         public LetterService(string date) : this(date, new FileSystem())
@@ -163,25 +168,43 @@ namespace ConsoleApp
         /// <summary>
         /// Combines the admission and scholarship files if they are from the same student. 
         /// </summary>
-        public void CombineStudentLetters()
+        public ArrayList CombineStudentLetters()
         {
 
             string[] admissionsFiles = this.filesFromDate["Admission"];
             string[] scholarshipFiles = this.filesFromDate["Scholarship"];
             fileSystem.Directory.CreateDirectory(fileSystem.Path.Join(this.dirOutput, this.date));
+            ArrayList studentIds = new();
 
             foreach (string admission in admissionsFiles)
             {
-                string idTxt = admission.Split("-")[1];
+                string admissionIdTxt = admission.Split("-")[1];
+                string admissionId = admissionIdTxt.Split(".")[0];
+
                 foreach (string scholarship in scholarshipFiles)
                 {
-                    if (scholarship.Contains(idTxt))
+                    string scholarshipId = scholarship.Split("-")[1].Split(".")[0];
+
+                    if (scholarship.Contains(admissionIdTxt))
                     {
-                        string resultFile = fileSystem.Path.Join(this.dirOutput, this.date, "combined-" + idTxt);
+                        string resultFile = fileSystem.Path.Join(this.dirOutput, this.date, "combined-" + admissionIdTxt);
                         this.CombineTwoLetters(admission, scholarship, resultFile);
+                        combinedFileCount++;
+                    }
+
+                    if (!studentIds.Contains(scholarshipId))
+                    {
+                        studentIds.Add(scholarshipId);
                     }
                 }
+
+                if (!studentIds.Contains(admissionId))
+                {
+                    studentIds.Add(admissionId);
+                }
             }
+
+            return studentIds;
         }
 
         /// <summary>
@@ -204,7 +227,7 @@ namespace ConsoleApp
         /// <summary>
         /// Generates a text report for the letters combined. 
         /// </summary>
-        public void GenerateTextReport()
+        public void GenerateTextReport(ArrayList studentIds)
         {
             string path = fileSystem.Path.Join(this.dirOutput, this.date, this.date + "-report.txt");
             string year = this.date.Substring(0, 4);
@@ -216,12 +239,10 @@ namespace ConsoleApp
             StringBuilder sb = new();
             sb.Append(month + "/" + day + "/" + year + " Report\n");
             sb.Append("-----------------------------\n\n");
-            sb.Append("Number of Combined Letters: " + files.Length + "\n");
+            sb.Append("Number of Combined Letters: " + combinedFileCount + "\n");
 
-            foreach (string file in files)
+            foreach (string id in studentIds)
             {
-                string fileName = fileSystem.Path.GetFileName(file);
-                string id = fileName.Split("-")[1].Split(".")[0];
                 sb.Append("\t" + id + "\n");
             }
 
